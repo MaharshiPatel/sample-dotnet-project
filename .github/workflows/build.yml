@@ -37,21 +37,16 @@ jobs:
 
       - name: Configure JFrog Artifactory for NuGet
         run: |
-         jf rt ping
-         jf dotnet-config --repo-resolve=alpha-nuget-virtual 
+         jf rt ping 
       
       - name: Restore Dependencies
-        run: dotnet restore
+        run: |
+            jf dotnet-config --repo-resolve=alpha-nuget-virtual
+            jf dotnet restore --build-name=${{ env.BUILD_NAME }} --build-number=${{ github.run_number }} 
 
-      - name: Build Project
-        run: dotnet build --configuration Release --no-restore
-
-      - name: Pack NuGet Package
+      - name: Build and Pack
         run: dotnet pack --configuration Release
-
+       
       - name: Publish NuGet Package to Artifactory
-        run: jf dotnet nuget push "bin/Release/*.nupkg" --build-name=my-dotnet-build --build-number=1
-
-      - name: Scan Artifacts with JFrog Xray
-        run: jf scan my-nuget-local/
+        run: jf dotnet nuget push "bin/*" --build-name=${{ env.BUILD_NAME }} --build-number=${{ github.run_number }}
 

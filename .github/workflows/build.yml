@@ -51,7 +51,7 @@ jobs:
         run: | 
             ls -l 
             tree -a
-            jf rt u bin/* alpha-nuget-virtual/${{ env.BUILD_NAME }}/${{ github.run_number }}/ 
+            jf rt u bin/Release/*.nupkg alpha-nuget-virtual/${{ env.BUILD_NAME }}/${{ github.run_number }}/ 
 
       - name: Publish build build-info
         run: |

@@ -38,7 +38,7 @@ jobs:
       - name: Configure JFrog Artifactory for NuGet
         run: |
          jf rt ping
-         jf dotnet-config --repo-resolve=alpha-nuget-virtual --repo-deploy=alpha-nuget-virtual
+         jf dotnet-config --repo-resolve=alpha-nuget-virtual 
       
       - name: Restore Dependencies
         run: dotnet restore

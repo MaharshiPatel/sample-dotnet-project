@@ -1,0 +1,57 @@
+name: 'dotnet sample payment project'
+
+on:
+    push:
+      branches:
+        - "**"
+    pull_request:
+      types: 
+        - closed
+      branches:
+        - main
+    workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+     BUILD_NAME: 'dotnet-payment-app'
+     JFROG_BUILD_STATUS: PASS
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x' # Adjust version as needed
+        
+      - name: JFrog CLI setup 🐸
+        uses: jfrog/setup-jfrog-cli@v4
+        env:
+         JF_URL: ${{ secrets.JF_URL }}
+         JF_PASSWORD: ${{ secrets.JF_PASSWORD }}
+         JF_USER: ${{secrets.JF_USER}}
+         NPM_JF_RT_REPO: ${{secrets.NUGET_JF_RT_REPO}}
+
+      - name: Configure JFrog Artifactory for NuGet
+        run: |
+         jf rt ping
+         jf dotnet config --repo-resolve=alpha-nuget-virtual --repo-deploy=alpha-nuget-virtual
+      
+      - name: Restore Dependencies
+        run: dotnet restore
+
+      - name: Build Project
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Pack NuGet Package
+        run: dotnet pack --configuration Release
+
+      - name: Publish NuGet Package to Artifactory
+        run: jf dotnet nuget push "bin/Release/*.nupkg" --build-name=my-dotnet-build --build-number=1
+
+      - name: Scan Artifacts with JFrog Xray
+        run: jf scan my-nuget-local/
+

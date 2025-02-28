@@ -1,0 +1,49 @@
+# Ignore build output
+bin/
+obj/
+out/
+
+# User-specific files
+*.user
+*.suo
+*.sln.cache
+*.vscode/
+*.vs/
+.idea/
+*.csproj.user
+
+# Logs and temporary files
+*.log
+logs/
+debug.log
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Dependency caches
+packages/
+node_modules/
+
+# NuGet package artifacts
+*.nupkg
+*.snupkg
+.nuget/
+.nuget/packages/
+project.lock.json
+
+# JFrog-specific files
+jfrog-cli.conf
+artifactory-repository.json
+jfrog/
+
+# Environment and secrets
+.env
+secrets.json
+appsettings.Development.json
+artifactory.config
+jfrog-cli-logs/
+jfrog-cli.temp/
+
+# OS-generated files
+.DS_Store
+Thumbs.db

@@ -48,5 +48,5 @@ jobs:
         run: dotnet pack --configuration Release
        
       - name: Publish NuGet Package to Artifactory
-        run: jf dotnet nuget push "bin/*" --build-name=${{ env.BUILD_NAME }} --build-number=${{ github.run_number }}
+        run: ls -l 
 

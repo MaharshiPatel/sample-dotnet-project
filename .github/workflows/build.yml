@@ -48,7 +48,9 @@ jobs:
         run: dotnet pack --configuration Release
        
       - name: Publish NuGet Package to Artifactory
-        run: ls -l 
+        run: | 
+            ls -l 
+            tree -a
 
       - name: Publish build build-info
         run: |

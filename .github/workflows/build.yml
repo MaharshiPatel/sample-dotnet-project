@@ -62,8 +62,8 @@ jobs:
           # Publish the build-info to Artifactory
           jf rt bp ${{env.BUILD_NAME}} ${{github.run_number}}
           
-       - name: Build Scan
-         run: |   
+      - name: Build Scan
+        run: |   
           # Scan the published build-info with Xray
           jf rt bs ${{env.BUILD_NAME}} ${{github.run_number}}
 

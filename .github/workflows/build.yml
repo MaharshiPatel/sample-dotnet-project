@@ -1,79 +1,74 @@
 name: 'dotnet sample payment project'
 
 on:
-    push:
-      branches:
-        - "**"
-    pull_request:
-      types: 
-        - closed
-      branches:
-        - main
-    workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-     BUILD_NAME: 'dotnet-payment-app'
-     JFROG_BUILD_STATUS: PASS
+      BUILD_NAME: 'dotnet-payment-app'
+      JFROG_BUILD_STATUS: PASS
 
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '8.0.x' # Adjust version as needed
-        
-      - name: JFrog CLI setup 🐸
+          dotnet-version: '8.0.x'
+
+      - name: Setup JFrog CLI
         uses: jfrog/setup-jfrog-cli@v4
         env:
-         JF_URL: ${{ secrets.JF_URL }}
-         JF_PASSWORD: ${{ secrets.JF_PASSWORD }}
-         JF_USER: ${{secrets.JF_USER}}
+          JF_URL: ${{ secrets.JF_URL }}
+          JF_PASSWORD: ${{ secrets.JF_PASSWORD }}
+          JF_USER: ${{ secrets.JF_USER }}
 
-      - name: Configure JFrog Artifactory for NuGet
+      - name: Configure Artifactory / NuGet
         run: |
-         jf rt ping 
+          jf rt ping
+          jf dotnet-config --repo-resolve=alpha-nuget-virtual
 
-      - name: Restore Dependencies
+      - name: "Curation: audit (continue on error)"
+        continue-on-error: true
         run: |
-            jf dotnet-config --repo-resolve=alpha-nuget-virtual
-            jf dotnet restore --build-name=${{ env.BUILD_NAME }} --build-number=${{ github.run_number }} 
+          jf ca --format=table --threads=4
 
-      # Package
-      - name: "Curation: audit" # https://docs.jfrog-applications.jfrog.io/jfrog-applications/jfrog-cli/cli-for-jfrog-security/cli-for-jfrog-curation
-        timeout-minutes: 15    # ref https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idstepstimeout-minutes
-        continue-on-error: true    # ref: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idstepscontinue-on-error
+      - name: Security Audit
         run: |
-          jf ca --format=table --threads=100
+          jf audit
 
-      - name: "Security Audit"  # https://docs.jfrog-applications.jfrog.io/jfrog-applications/jfrog-cli/cli-for-jfrog-security
+      - name: Restore dependencies (via JFrog)
         run: |
-          jf audit 
- 
-      - name: Build and Pack
-        run: dotnet pack --configuration Release
-       
-      - name: Publish NuGet Package to Artifactory
-        run: | 
-            ls -l 
-            tree -a
-            jf rt u bin/Release/*.nupkg alpha-nuget-virtual/${{ env.BUILD_NAME }}/${{ github.run_number }}/  --module=sample-dotnet-project
+          jf dotnet restore --build-name=${{ env.BUILD_NAME }} --build-number=${{ github.run_number }}
 
-      - name: Publish build build-info
+      - name: Build
         run: |
-          # Collect and store environment variables in the build-info
-          jf rt bce ${{env.BUILD_NAME}} ${{github.run_number}}
-          # Collect and store VCS details in the build-info
-          jf rt bag ${{env.BUILD_NAME}} ${{github.run_number}}
-          # Publish the build-info to Artifactory
-          jf rt bp ${{env.BUILD_NAME}} ${{github.run_number}}
-          
-      - name: Build Scan
-        run: |   
-          # Scan the published build-info with Xray
-          jf rt bs ${{env.BUILD_NAME}} ${{github.run_number}}
+          dotnet build ./sample-dotnet-project.csproj --configuration Release --no-restore
+
+      - name: Pack (create nupkg in ./nupkg)
+        run: |
+          mkdir -p ./nupkg
+          dotnet pack ./sample-dotnet-project.csproj --configuration Release -o ./nupkg --no-build
+
+      - name: Publish NuGet package to Artifactory
+        run: |
+          echo "nupkg contents:" && ls -la ./nupkg || true
+          jf rt u "./nupkg/*.nupkg" alpha-nuget-virtual/${{ env.BUILD_NAME }}/${{ github.run_number }}/ --module=sample-dotnet-project
+
+      - name: Publish build-info to Artifactory
+        run: |
+          jf rt bce ${{ env.BUILD_NAME }} ${{ github.run_number }}
+          jf rt bag ${{ env.BUILD_NAME }} ${{ github.run_number }}
+          jf rt bp ${{ env.BUILD_NAME }} ${{ github.run_number }}
+
+      - name: Build scan (Xray)
+        run: |
+          jf rt bs ${{ env.BUILD_NAME }} ${{ github.run_number }}
 

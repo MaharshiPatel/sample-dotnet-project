@@ -1,18 +1,31 @@
-﻿// Sample .NET Console Application with Serilog
+﻿// Sample .NET Console Application with NLog
 using System;
-using Serilog;
+using NLog;
 
 class Program
 {
     static void Main()
     {
-        // Configure Serilog
-        Log.Logger = new LoggerConfiguration()
-            .WriteTo.Console()
-            .CreateLogger();
+        // Initialize NLog from configuration (nlog.config will be copied to output)
+        NLog.LogManager.LoadConfiguration("nlog.config");
+        var logger = NLog.LogManager.GetCurrentClassLogger();
+        try
+        {
+            logger.Info("Application starting");
 
-        Log.Information("Hello, .NET with Serilog!");
-
-        Log.CloseAndFlush();
+            Console.WriteLine("Hello, .NET with NLog!");
+            logger.Info("Hello printed to console");
+        }
+        catch (Exception ex)
+        {
+            // NLog: catch setup errors
+            logger.Error(ex, "Unhandled exception");
+            throw;
+        }
+        finally
+        {
+            // Ensure to flush and stop internal timers/threads before application-exit (avoid segmentation fault on Linux)
+            NLog.LogManager.Shutdown();
+        }
     }
 }

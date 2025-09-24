@@ -1,0 +1,18 @@
+{
+  "InvoiceNumber": "INV-2025-001",
+  "InvoiceDate": "2025-09-24T00:00:00",
+  "Seller": {
+    "Name": "ACME Corp",
+    "Address": "1 Main Street\nCity, State",
+    "LogoPath": "logo.png"
+  },
+  "Buyer": {
+    "Name": "John Doe",
+    "Address": "123 Elm Street\nTown, State"
+  },
+  "Items": [
+    { "Description": "Widget A", "UnitPrice": 19.99, "Quantity": 2 },
+    { "Description": "Service B", "UnitPrice": 150.00, "Quantity": 1 }
+  ],
+  "TaxPercent": 8.5
+}

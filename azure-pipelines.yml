@@ -15,13 +15,24 @@ steps:
     packageType: sdk
     version: '10.0.x'
 
-- task: ArtifactoryToolsInstaller@1
+- script: |
+    curl -fL https://install-cli.jfrog.io | sh
+    echo "##vso[task.prependpath]$(pwd)"
+    jf --version
   displayName: 'Install JFrog CLI'
-  inputs:
-    artifactoryService: 'Artifactory'
 
-- script: jf rt ping
-  displayName: 'Ping Artifactory'
+- script: |
+    jf config add solenglatest \
+      --url=$(JF_URL) \
+      --user=$(JF_USER) \
+      --password=$(JF_PASSWORD) \
+      --interactive=false
+    jf rt ping
+  displayName: 'Configure JFrog CLI and ping Artifactory'
+  env:
+    JF_URL: $(JF_URL)
+    JF_USER: $(JF_USER)
+    JF_PASSWORD: $(JF_PASSWORD)
 
 - task: ArtifactoryNuGet@2
   displayName: 'Restore NuGet packages via Artifactory'

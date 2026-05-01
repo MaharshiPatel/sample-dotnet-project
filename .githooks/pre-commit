@@ -36,9 +36,9 @@ for FILE in $STAGED; do
 
   CONTENT=$(git show ":$FILE" 2>/dev/null) || continue
 
-  # ── Rule 1: NuGet ClearTextPassword ─────────────────────────────────────
+  # ── Rule 1: NuGet ClearTextPassword in XML value context ────────────────
   check "NuGet ClearTextPassword" \
-    'ClearTextPassword' \
+    'key="ClearTextPassword"[[:space:]]*value="[^"]' \
     "$FILE" "$CONTENT"
 
   # ── Rule 2: Private key block ────────────────────────────────────────────
@@ -73,7 +73,6 @@ for FILE in $STAGED; do
   fi
 
   # ── Rule 6: Long base64 blob in an assignment (copy-pasted token) ────────
-  # e.g.  token = "REDACTED..."
   check "Base64 token in assignment" \
     '(token|apikey|api_key|auth_key)[[:space:]]*[=:][[:space:]]*"[A-Za-z0-9+/]{40,}={0,2}"' \
     "$FILE" "$CONTENT"

@@ -18,3 +18,9 @@ description = "NuGet package content hashes in packages.lock.json are not secret
 paths = [
     '''packages\.lock\.json''',
 ]
+
+[[allowlists]]
+description = "pre-commit hook comment used a partial base64 example that looked like a token (fixed in next commit)"
+commits = [
+    "16a4f10c9656224d9a57c426c1ad63766662f414",
+]

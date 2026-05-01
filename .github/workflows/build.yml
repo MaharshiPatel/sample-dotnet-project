@@ -17,11 +17,39 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Secret scan (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read current version
+        run: |
+          VERSION=$(grep -oP '(?<=<Version>)[^<]+' sample-dotnet-project.csproj)
+          echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Bump patch version
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          FILE="sample-dotnet-project.csproj"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$APP_VERSION"
+          NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+          sed -i "s|<Version>$APP_VERSION</Version>|<Version>$NEW_VERSION</Version>|" "$FILE"
+          echo "APP_VERSION=$NEW_VERSION" >> "$GITHUB_ENV"
+          echo "Bumped version $APP_VERSION -> $NEW_VERSION"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$FILE"
+          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+          git push
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Setup JFrog CLI
         uses: jfrog/setup-jfrog-cli@v4
@@ -30,45 +58,43 @@ jobs:
           JF_PASSWORD: ${{ secrets.JF_PASSWORD }}
           JF_USER: ${{ secrets.JF_USER }}
 
-      - name: Configure Artifactory / NuGet
-        run: |
-          jf rt ping
-          jf dotnet-config --repo-resolve=alpha-nuget-virtual
+      - name: Ping Artifactory
+        run: jf rt ping
 
-      - name: "Curation: audit (continue on error)"
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-packages-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          restore-keys: |
+            nuget-packages-${{ runner.os }}-
+
+      - name: Curation audit
         continue-on-error: true
-        run: |
-          jf ca --format=table --threads=4
+        run: jf ca --format=table --threads=4
 
-      - name: Security Audit
-        run: |
-          jf audit
+      - name: Security audit
+        run: jf audit
 
-      - name: Restore dependencies (via JFrog)
-        run: |
-          jf dotnet restore --build-name=${{ env.BUILD_NAME }} --build-number=${{ github.run_number }}
+      - name: Restore dependencies
+        run: dotnet restore sample-dotnet-project.csproj
 
       - name: Build
-        run: |
-          dotnet build ./sample-dotnet-project.csproj --configuration Release --no-restore
+        run: dotnet build sample-dotnet-project.csproj --configuration Release --no-restore
 
-      - name: Pack (create nupkg in ./nupkg)
-        run: |
-          mkdir -p ./nupkg
-          dotnet pack ./sample-dotnet-project.csproj --configuration Release -o ./nupkg --no-build
+      - name: Pack
+        run: dotnet pack sample-dotnet-project.csproj --configuration Release --no-build -o ./nupkg
 
       - name: Publish NuGet package to Artifactory
         run: |
-          echo "nupkg contents:" && ls -la ./nupkg || true
-          jf rt u "./nupkg/*.nupkg" alpha-nuget-virtual/${{ env.BUILD_NAME }}/${{ github.run_number }}/ --module=sample-dotnet-project
+          jf rt u "./nupkg/*.nupkg" alpha-nuget-virtual/${{ env.BUILD_NAME }}/${{ env.APP_VERSION }}/ \
+            --module=sample-dotnet-project
 
       - name: Publish build-info to Artifactory
         run: |
           jf rt bce ${{ env.BUILD_NAME }} ${{ github.run_number }}
           jf rt bag ${{ env.BUILD_NAME }} ${{ github.run_number }}
-          jf rt bp ${{ env.BUILD_NAME }} ${{ github.run_number }}
+          jf rt bp  ${{ env.BUILD_NAME }} ${{ github.run_number }}
 
       - name: Build scan (Xray)
-        run: |
-          jf rt bs ${{ env.BUILD_NAME }} ${{ github.run_number }}
-
+        run: jf rt bs ${{ env.BUILD_NAME }} ${{ github.run_number }}

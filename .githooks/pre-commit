@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Secret leak detection — runs before every git commit.
+# Blocks the commit if a staged file contains a known secret pattern.
+
+set -euo pipefail
+
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
+[[ -z "$STAGED" ]] && exit 0
+
+FAIL=0
+SKIP_EXT='\.(png|jpg|jpeg|gif|ico|svg|pdf|sln|lock|nupkg|snupkg|dll|pdb|exe)$'
+
+echo -e "${CYAN}Scanning staged files for secrets...${NC}"
+
+check() {
+  local label="$1" regex="$2" file="$3" content="$4"
+  if echo "$content" | grep -Eiq -e "$regex"; then
+    local line
+    line=$(echo "$content" | grep -Ein -e "$regex" | head -3)
+    echo -e "${RED}  SECRET DETECTED${NC}: $label"
+    echo -e "  File  : ${YELLOW}$file${NC}"
+    echo -e "  Match : $line"
+    echo ""
+    FAIL=1
+  fi
+}
+
+for FILE in $STAGED; do
+  [[ ! -f "$FILE" ]] && continue
+  [[ "$FILE" =~ $SKIP_EXT ]] && continue
+
+  CONTENT=$(git show ":$FILE" 2>/dev/null) || continue
+
+  # ── Rule 1: NuGet ClearTextPassword ─────────────────────────────────────
+  check "NuGet ClearTextPassword" \
+    'ClearTextPassword' \
+    "$FILE" "$CONTENT"
+
+  # ── Rule 2: Private key block ────────────────────────────────────────────
+  check "Private key header" \
+    '-----BEGIN (RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY' \
+    "$FILE" "$CONTENT"
+
+  # ── Rule 3: JFrog reference token (reftkn:01:...) ───────────────────────
+  check "JFrog reference token" \
+    'reftkn:[A-Za-z0-9:]{10,}' \
+    "$FILE" "$CONTENT"
+
+  # ── Rule 4: AWS access key ───────────────────────────────────────────────
+  check "AWS access key" \
+    'AKIA[0-9A-Z]{16}' \
+    "$FILE" "$CONTENT"
+
+  # ── Rule 5: Hardcoded password/secret assignment ─────────────────────────
+  # Matches:   password = "abc123"   OR   secret: "abc123"
+  # Skips:     GetEnvironmentVariable(   ${{ secrets.X }}   env.SOMETHING
+  if echo "$CONTENT" | grep -Eiq '(password|secret|passwd|api_?key)[[:space:]]*[=:][[:space:]]*"[^"$\{]{8,}"'; then
+    # Filter out lines that are clearly env-var lookups or YAML placeholders
+    HITS=$(echo "$CONTENT" | grep -Eini '(password|secret|passwd|api_?key)[[:space:]]*[=:][[:space:]]*"[^"$\{]{8,}"' \
+      | grep -Eiv '(GetEnvironmentVariable|secrets\.|env\.|GITHUB_|placeholder|example|CHANGEME|your[-_]|<|>)')
+    if [[ -n "$HITS" ]]; then
+      echo -e "${RED}  SECRET DETECTED${NC}: Hardcoded credential assignment"
+      echo -e "  File  : ${YELLOW}$FILE${NC}"
+      echo -e "  Match : $(echo "$HITS" | head -3)"
+      echo ""
+      FAIL=1
+    fi
+  fi
+
+  # ── Rule 6: Long base64 blob in an assignment (copy-pasted token) ────────
+  # e.g.  token = "REDACTED..."
+  check "Base64 token in assignment" \
+    '(token|apikey|api_key|auth_key)[[:space:]]*[=:][[:space:]]*"[A-Za-z0-9+/]{40,}={0,2}"' \
+    "$FILE" "$CONTENT"
+
+done
+
+if [[ $FAIL -ne 0 ]]; then
+  echo -e "${RED}Commit blocked.${NC} Fix the issue(s) above before committing."
+  echo "  → Store secrets in environment variables, not source code."
+  echo "  → Add a false positive to .gitleaks.toml allowlists if needed."
+  exit 1
+fi
+
+echo -e "No secrets detected. Proceeding with commit."
+exit 0

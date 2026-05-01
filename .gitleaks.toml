@@ -1,0 +1,20 @@
+# Gitleaks configuration
+# Docs: https://github.com/gitleaks/gitleaks
+title = "ToddlerToys gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Plaid and Affirm sandbox placeholder values (not real credentials)"
+regexes = [
+    '''sandbox_client_id''',
+    '''sandbox_secret''',
+    '''sandbox_private_key''',
+]
+
+[[allowlists]]
+description = "NuGet package content hashes in packages.lock.json are not secrets"
+paths = [
+    '''packages\.lock\.json''',
+]

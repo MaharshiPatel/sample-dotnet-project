@@ -1,27 +1,66 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
 - main
 
 pool:
   vmImage: ubuntu-latest
 
-steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+variables:
+  buildConfiguration: 'Release'
+  buildName: 'dotnet-payment-app'
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+steps:
+- task: UseDotNet@2
+  displayName: 'Use .NET 10'
+  inputs:
+    packageType: sdk
+    version: '10.0.x'
+
+- task: ArtifactoryToolsInstaller@1
+  displayName: 'Install JFrog CLI'
+  inputs:
+    artifactoryService: 'Artifactory'
+
+- script: jf rt ping
+  displayName: 'Ping Artifactory'
 
 - task: ArtifactoryNuGet@2
+  displayName: 'Restore NuGet packages via Artifactory'
   inputs:
     command: 'restore'
     artifactoryService: 'Artifactory'
     targetResolveRepo: 'alpha-nuget-virtual'
-    solutionPath: '**/*.sln'
+    solutionPath: 'sample-dotnet-project.sln'
     nugetProtocolVersion: 'v3'
+
+- task: DotNetCoreCLI@2
+  displayName: 'Build'
+  inputs:
+    command: 'build'
+    projects: 'sample-dotnet-project.csproj'
+    arguments: '--configuration $(buildConfiguration) --no-restore'
+
+- task: DotNetCoreCLI@2
+  displayName: 'Pack NuGet package'
+  inputs:
+    command: 'pack'
+    packagesToPack: 'sample-dotnet-project.csproj'
+    configuration: '$(buildConfiguration)'
+    outputDir: '$(Build.ArtifactStagingDirectory)/nupkg'
+    nobuild: true
+
+- script: |
+    jf rt u "$(Build.ArtifactStagingDirectory)/nupkg/*.nupkg" \
+      alpha-nuget-virtual/$(buildName)/$(Build.BuildNumber)/ \
+      --module=sample-dotnet-project \
+      --build-name=$(buildName) \
+      --build-number=$(Build.BuildNumber)
+  displayName: 'Publish NuGet package to Artifactory'
+
+- script: |
+    jf rt bce $(buildName) $(Build.BuildNumber)
+    jf rt bag $(buildName) $(Build.BuildNumber)
+    jf rt bp  $(buildName) $(Build.BuildNumber)
+  displayName: 'Publish build-info to Artifactory'
+
+- script: jf rt bs $(buildName) $(Build.BuildNumber)
+  displayName: 'Build scan (Xray)'
